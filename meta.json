@@ -1,0 +1,134 @@
+{
+  "version": "3.0.0",
+  "metadata": {
+    "id": "code-drf",
+    "name": "Django REST Framework Backend",
+    "kind": "code",
+    "layers": [
+      "backend"
+    ],
+    "type": "drf",
+    "description": "Bare minimum Django REST Framework API skeleton",
+    "version": "1.0.0",
+    "author": "Genesis Team",
+    "tags": [
+      "django",
+      "drf",
+      "python",
+      "backend",
+      "rest-api"
+    ],
+    "providers": ["aws"]
+  },
+  "scaffoldConfigTemplate": [
+    {
+      "key": "pythonVersion",
+      "label": "Python Version",
+      "type": "select",
+      "options": [
+        "3.12"
+      ],
+      "default": "3.12",
+      "required": true,
+      "description": "Python language version",
+      "category": "build"
+    },
+    {
+      "key": "djangoVersion",
+      "label": "Django Version",
+      "type": "select",
+      "options": [
+        "5.2"
+      ],
+      "default": "5.2",
+      "required": true,
+      "description": "Django framework version (LTS)",
+      "category": "build"
+    },
+    {
+      "key": "drfVersion",
+      "label": "Django REST Framework Version",
+      "type": "select",
+      "options": [
+        "3.16"
+      ],
+      "default": "3.16",
+      "required": true,
+      "description": "Django REST Framework version",
+      "category": "build"
+    }
+  ],
+  "dependencies": {
+    "pip": [
+      "Django==5.2",
+      "djangorestframework==3.16",
+      "django-cors-headers==4.3.1",
+      "gunicorn==21.2.0",
+      "python-dotenv==1.0.0",
+      "pytest==8.0.0",
+      "pytest-django==4.8.0"
+    ]
+  },
+  "runtimeConfigTemplate": [],
+  "generation": {
+    "files": {
+      "remove": []
+    },
+    "layers": {
+      "backend": {}
+    }
+  },
+  "gitignore": [
+    "# Python",
+    "*.py[cod]",
+    "*$py.class",
+    "*.so",
+    ".Python",
+    "build/",
+    "develop-eggs/",
+    "dist/",
+    "downloads/",
+    "eggs/",
+    ".eggs/",
+    "lib/",
+    "lib64/",
+    "parts/",
+    "sdist/",
+    "var/",
+    "wheels/",
+    "*.egg-info/",
+    ".installed.cfg",
+    "*.egg",
+    "",
+    "# Django",
+    "*.log",
+    "local_settings.py",
+    "db.sqlite3",
+    "db.sqlite3-journal",
+    "media/",
+    "staticfiles/",
+    "",
+    "# Virtual Environment",
+    "venv/",
+    "env/",
+    "ENV/",
+    ".venv",
+    "",
+    "# IDEs",
+    ".vscode/",
+    ".idea/",
+    "*.swp",
+    "*.swo",
+    "*~",
+    "",
+    "# Environment",
+    ".env",
+    ".env.*",
+    "!.env.example",
+    "",
+    "# pytest",
+    ".pytest_cache/",
+    ".coverage",
+    "htmlcov/"
+  ]
+}
