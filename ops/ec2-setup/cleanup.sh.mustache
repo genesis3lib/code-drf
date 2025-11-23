@@ -1,0 +1,72 @@
+#!/bin/bash
+# Cleanup script for {{projectName}} Django/Gunicorn deployment
+# Usage: ./cleanup.sh [keep_count]
+# Default: keeps 5 most recent backups
+
+KEEP_COUNT=${1:-5}
+
+echo "=== Cleanup Script for {{backendModule.name}} ==="
+echo "Keeping $KEEP_COUNT most recent backups"
+echo
+
+# Cleanup old app backups
+BACKUP_DIR="/opt/{{backendModule.name}}/backups"
+if [ -d "$BACKUP_DIR" ]; then
+    echo "--- Cleaning up old app backups ---"
+
+    # Count backups
+    BACKUP_COUNT=$(ls -1d $BACKUP_DIR/app.backup.* 2>/dev/null | wc -l)
+    echo "Found $BACKUP_COUNT app backups"
+
+    if [ "$BACKUP_COUNT" -gt "$KEEP_COUNT" ]; then
+        # Remove old backups, keeping the most recent KEEP_COUNT
+        ls -1dt $BACKUP_DIR/app.backup.* | tail -n +$((KEEP_COUNT + 1)) | xargs -r rm -rf
+        echo "Removed $((BACKUP_COUNT - KEEP_COUNT)) old backups"
+    else
+        echo "No old backups to remove"
+    fi
+else
+    echo "Backup directory not found: $BACKUP_DIR"
+fi
+
+echo
+
+# Cleanup old logs
+LOG_DIR="/opt/{{backendModule.name}}/logs"
+if [ -d "$LOG_DIR" ]; then
+    echo "--- Cleaning up old logs ---"
+
+    # Remove logs older than 30 days
+    find "$LOG_DIR" -name "*.log.*" -type f -mtime +30 -delete 2>/dev/null
+
+    # Truncate large log files (over 100MB)
+    for log in "$LOG_DIR"/*.log; do
+        if [ -f "$log" ]; then
+            SIZE=$(stat -f%z "$log" 2>/dev/null || stat -c%s "$log" 2>/dev/null)
+            if [ "$SIZE" -gt 104857600 ]; then
+                echo "Truncating large log: $log ($SIZE bytes)"
+                tail -n 10000 "$log" > "$log.tmp" && mv "$log.tmp" "$log"
+            fi
+        fi
+    done
+
+    echo "Log cleanup complete"
+else
+    echo "Log directory not found: $LOG_DIR"
+fi
+
+echo
+
+# Cleanup pip cache
+echo "--- Cleaning up pip cache ---"
+sudo -u {{backendModule.name}} /opt/{{backendModule.name}}/venv/bin/pip cache purge 2>/dev/null || echo "Pip cache cleanup skipped"
+
+echo
+
+# Cleanup pycache
+echo "--- Cleaning up Python cache ---"
+find /opt/{{backendModule.name}}/app -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || echo "Pycache cleanup complete"
+find /opt/{{backendModule.name}}/app -name "*.pyc" -delete 2>/dev/null || echo "Pyc cleanup complete"
+
+echo
+echo "=== Cleanup completed ==="

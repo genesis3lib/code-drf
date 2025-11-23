@@ -1,0 +1,28 @@
+[Unit]
+Description={{projectName}} API Service (Gunicorn)
+After=network.target
+
+[Service]
+Type=notify
+User={{backendModule.name}}
+Group={{backendModule.name}}
+WorkingDirectory=/opt/{{backendModule.name}}/app
+EnvironmentFile=-/opt/{{backendModule.name}}/env/django.env
+ExecStart=/opt/{{backendModule.name}}/venv/bin/gunicorn \
+    --workers 3 \
+    --bind 0.0.0.0:8080 \
+    --access-logfile /opt/{{backendModule.name}}/logs/access.log \
+    --error-logfile /opt/{{backendModule.name}}/logs/error.log \
+    --capture-output \
+    --enable-stdio-inheritance \
+    --timeout 120 \
+    prj_{{projectName}}.wsgi:application
+ExecReload=/bin/kill -s HUP $MAINPID
+KillMode=mixed
+TimeoutStopSec=5
+PrivateTmp=true
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

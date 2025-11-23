@@ -1,0 +1,29 @@
+#!/bin/bash
+# Check status of {{projectName}} Django/Gunicorn service
+# Usage: ./status.sh
+
+echo "=== {{backendModule.name}}-api Service Status ==="
+echo
+
+echo "--- Service Status ---"
+sudo systemctl status {{backendModule.name}}-api.service --no-pager
+
+echo
+echo "--- Recent Logs ---"
+sudo journalctl -u {{backendModule.name}}-api.service -n 20 --no-pager
+
+echo
+echo "--- Process Info ---"
+ps aux | grep gunicorn | grep -v grep || echo "No gunicorn processes found"
+
+echo
+echo "--- Port 8080 ---"
+sudo netstat -tlnp | grep 8080 || echo "Port 8080 not in use"
+
+echo
+echo "--- Application Files ---"
+ls -la /opt/{{backendModule.name}}/app/ 2>/dev/null || echo "App directory not found"
+
+echo
+echo "--- Virtual Environment ---"
+ls -la /opt/{{backendModule.name}}/venv/bin/ 2>/dev/null | head -5 || echo "Virtual environment not found"

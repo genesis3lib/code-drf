@@ -5,7 +5,9 @@
     "name": "Django REST Framework Backend",
     "kind": "code",
     "layers": [
-      "backend"
+      "backend",
+      "cicd",
+      "ops"
     ],
     "type": "drf",
     "description": "Bare minimum Django REST Framework API skeleton",
@@ -75,7 +77,9 @@
       "remove": []
     },
     "layers": {
-      "backend": {}
+      "backend": {},
+      "cicd": {},
+      "ops": {}
     }
   },
   "gitignore": [

@@ -1,0 +1,20 @@
+#!/bin/bash
+# Restart {{projectName}} Django/Gunicorn service
+# Usage: ./restart.sh
+
+echo "=== Restarting {{backendModule.name}}-api service ==="
+
+sudo systemctl restart {{backendModule.name}}-api.service
+
+# Wait for service to start
+sleep 3
+
+# Check status
+if systemctl is-active --quiet {{backendModule.name}}-api.service; then
+    echo "Service restarted successfully"
+    sudo systemctl status {{backendModule.name}}-api.service --no-pager
+else
+    echo "Service failed to restart"
+    sudo journalctl -u {{backendModule.name}}-api.service -n 20 --no-pager
+    exit 1
+fi

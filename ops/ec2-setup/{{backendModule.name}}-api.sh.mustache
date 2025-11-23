@@ -1,0 +1,27 @@
+#!/bin/bash
+# Startup script for {{projectName}} Django/Gunicorn API
+# This script is called by systemd or can be run manually
+
+# Load environment file if it exists
+if [ -f /opt/{{backendModule.name}}/env/django.env ]; then
+    set -a
+    source /opt/{{backendModule.name}}/env/django.env
+    set +a
+fi
+
+# Set defaults if not provided
+export DJANGO_SETTINGS_MODULE=${DJANGO_SETTINGS_MODULE:-prj_{{projectName}}.settings.production}
+
+# Change to app directory
+cd /opt/{{backendModule.name}}/app
+
+# Run gunicorn
+exec /opt/{{backendModule.name}}/venv/bin/gunicorn \
+    --workers 3 \
+    --bind 0.0.0.0:8080 \
+    --access-logfile /opt/{{backendModule.name}}/logs/access.log \
+    --error-logfile /opt/{{backendModule.name}}/logs/error.log \
+    --capture-output \
+    --enable-stdio-inheritance \
+    --timeout 120 \
+    prj_{{projectName}}.wsgi:application

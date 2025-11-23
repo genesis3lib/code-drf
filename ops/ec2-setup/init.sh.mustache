@@ -1,0 +1,355 @@
+#!/bin/bash
+
+# S3-Based Initialization and Deployment for Django/DRF
+# Exit on any error
+set -e
+
+APP_VERSION=$1
+DJANGO_SETTINGS_MODULE=$2
+
+if [ -z "$APP_VERSION" ]; then
+    echo "Usage: $0 <app-version> [django-settings-module]"
+    echo "Example: $0 1.0.123"
+    exit 1
+fi
+
+echo "=== Starting S3-Based Initialization and Deployment ==="
+echo "=== Version: $APP_VERSION ==="
+
+# Configure AWS CLI region for this script
+export AWS_DEFAULT_REGION="{{region}}"
+echo "=== AWS Region: $AWS_DEFAULT_REGION ==="
+
+# Get AWS Account ID for bucket names (all buckets include account ID for global uniqueness)
+AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+echo "=== AWS Account ID: $AWS_ACCOUNT_ID ==="
+
+# 1. Set timezone
+echo "=== Setting timezone ==="
+sudo timedatectl set-timezone US/Central
+
+# 2. Create directories if not exists
+echo "=== Creating directory structure ==="
+sudo mkdir -p /opt/{{backendModule.name}}/ec2-setup
+sudo mkdir -p /opt/{{backendModule.name}}/app
+sudo mkdir -p /opt/{{backendModule.name}}/env
+sudo mkdir -p /opt/{{backendModule.name}}/logs
+sudo mkdir -p /opt/{{backendModule.name}}/backups
+sudo mkdir -p /opt/{{backendModule.name}}/venv
+
+# 3. Install system dependencies
+echo "=== Installing system dependencies ==="
+sudo yum update -y
+
+# Install Python 3.12
+echo "Installing Python 3.12..."
+if command -v python3.12 &> /dev/null; then
+    echo "Python 3.12 is already installed:"
+    python3.12 --version
+else
+    echo "Installing Python 3.12..."
+    # Check OS version and install accordingly
+    if grep -q "Amazon Linux 2023" /etc/os-release; then
+        echo "Detected Amazon Linux 2023, installing Python 3.12..."
+        sudo yum install -y python3.12 python3.12-pip python3.12-devel
+    elif grep -q "Amazon Linux 2" /etc/os-release; then
+        echo "Detected Amazon Linux 2, installing Python 3.12 from extras..."
+        sudo amazon-linux-extras install python3.12 -y || sudo yum install -y python3.12 python3.12-pip python3.12-devel
+    else
+        echo "Unknown Linux distribution, trying default Python installation..."
+        sudo yum install -y python3.12 python3.12-pip python3.12-devel || sudo yum install -y python3 python3-pip python3-devel
+    fi
+
+    # Verify installation
+    if command -v python3.12 &> /dev/null; then
+        echo "Python 3.12 installed successfully:"
+        python3.12 --version
+    elif command -v python3 &> /dev/null; then
+        echo "Python 3 installed (not 3.12):"
+        python3 --version
+    else
+        echo "Python installation failed!"
+        exit 1
+    fi
+fi
+
+# Install PostgreSQL client (try multiple package names for compatibility)
+echo "Installing PostgreSQL client..."
+sudo yum install -y postgresql postgresql-client || sudo yum install -y postgresql15 || echo "PostgreSQL client installation skipped"
+
+# Install other dependencies
+sudo yum install -y awscli jq wget curl unzip gcc
+
+echo "=== Verifying installed packages ==="
+python3.12 --version || python3 --version
+aws --version
+jq --version
+psql --version || echo "PostgreSQL verification failed"
+
+# 4. Create {{backendModule.name}} user if not exists
+echo "=== Creating {{backendModule.name}} user ==="
+if ! id "{{backendModule.name}}" &>/dev/null; then
+    sudo useradd -r -s /bin/bash -d /opt/{{backendModule.name}} -c "{{backendModule.name}} API Service" {{backendModule.name}}
+    echo "User '{{backendModule.name}}' created successfully"
+else
+    echo "User '{{backendModule.name}}' already exists"
+fi
+
+# 5. Sync all EC2 setup files from S3
+echo "=== Syncing all EC2 setup scripts from S3 ==="
+
+# Determine environment for S3 bucket (fallback to django settings or production)
+if [ -n "$DJANGO_SETTINGS_MODULE" ]; then
+    # Extract environment from settings module (e.g., prj_myapp.settings.production -> production)
+    ENV_FOR_S3=$(echo "$DJANGO_SETTINGS_MODULE" | sed 's/.*\.//')
+else
+    ENV_FOR_S3="production"
+fi
+
+echo "Source: s3://{{projectName}}-${ENV_FOR_S3}-ops-${AWS_ACCOUNT_ID}/ec2-setup/"
+echo "Target: /opt/{{backendModule.name}}/ec2-setup/"
+
+# Create target directory if it doesn't exist
+sudo mkdir -p /opt/{{backendModule.name}}/ec2-setup
+
+# Sync all files from S3 ec2-setup directory
+if sudo aws s3 sync s3://{{projectName}}-${ENV_FOR_S3}-ops-${AWS_ACCOUNT_ID}/ec2-setup/ /opt/{{backendModule.name}}/ec2-setup/; then
+    echo "Successfully synced EC2 setup scripts from S3"
+
+    # Make all shell scripts executable
+    sudo chmod +x /opt/{{backendModule.name}}/ec2-setup/*.sh
+
+    # Set ownership for all files
+    sudo chown -R {{backendModule.name}}:{{backendModule.name}} /opt/{{backendModule.name}}/ec2-setup/
+
+    echo "Downloaded EC2 setup files:"
+    ls -la /opt/{{backendModule.name}}/ec2-setup/
+else
+    echo "Failed to sync EC2 setup scripts from S3"
+    echo "Continuing with manual setup..."
+fi
+
+# 6. Setup systemd service
+echo "=== Setting up systemd service ==="
+if [ -f "/opt/{{backendModule.name}}/ec2-setup/{{backendModule.name}}-api.service" ]; then
+    sudo cp /opt/{{backendModule.name}}/ec2-setup/{{backendModule.name}}-api.service /etc/systemd/system/
+    sudo systemctl daemon-reload
+    sudo systemctl enable {{backendModule.name}}-api.service
+    echo "Systemd service configured successfully"
+else
+    echo "Service file not found: /opt/{{backendModule.name}}/ec2-setup/{{backendModule.name}}-api.service"
+    echo "Manual service setup may be required"
+fi
+
+# 7. Set ownership
+echo "=== Setting ownership ==="
+sudo chown -R {{backendModule.name}}:{{backendModule.name}} /opt/{{backendModule.name}}
+
+# 8. Configure Django settings and secrets
+echo "=== Configuring Django settings and secrets ==="
+
+# Determine environment for secret name (fallback to django settings or production)
+if [ -n "$DJANGO_SETTINGS_MODULE" ]; then
+    ENV_FOR_SECRET=$(echo "$DJANGO_SETTINGS_MODULE" | sed 's/.*\.//')
+    echo "Using Django settings module for environment: $DJANGO_SETTINGS_MODULE"
+else
+    ENV_FOR_SECRET="production"
+    echo "No Django settings specified, defaulting to production"
+fi
+
+# Read extension-required Django settings from genesis3.json
+EXTENSION_SETTINGS=""
+if [ -f "/opt/{{backendModule.name}}/ec2-setup/genesis3.json" ]; then
+    echo "Reading extension settings from genesis3.json..."
+    # For Django, we might use different profiles/settings
+    EXTENSION_SETTINGS=$(jq -r '.djangoSettings // [] | join(",")' /opt/{{backendModule.name}}/ec2-setup/genesis3.json)
+    if [ -n "$EXTENSION_SETTINGS" ]; then
+        echo "Found extension settings: $EXTENSION_SETTINGS"
+    else
+        echo "No extension settings found in genesis3.json"
+    fi
+else
+    echo "genesis3.json not found at /opt/{{backendModule.name}}/ec2-setup/genesis3.json"
+    echo "Continuing without extension settings"
+fi
+
+# Single secret name for all application and database secrets
+APP_SECRET_NAME="{{projectName}}-${ENV_FOR_SECRET}-app-secrets"
+echo "Looking for application secrets: $APP_SECRET_NAME"
+
+# Start building the django.env file
+echo "Creating Django environment configuration..."
+TEMP_DJANGO_ENV="/tmp/django.env.$$"
+
+# Set Django settings module
+if [ -n "$DJANGO_SETTINGS_MODULE" ]; then
+    SETTINGS_MODULE="$DJANGO_SETTINGS_MODULE"
+else
+    SETTINGS_MODULE="prj_{{projectName}}.settings.production"
+fi
+
+echo "DJANGO_SETTINGS_MODULE=$SETTINGS_MODULE" > "$TEMP_DJANGO_ENV"
+echo "Set DJANGO_SETTINGS_MODULE=$SETTINGS_MODULE"
+
+# Set APP_ENV_HOST and APP_ENV_UI based on environment
+if [ "$ENV_FOR_SECRET" = "prod" ] || [ "$ENV_FOR_SECRET" = "production" ]; then
+    # Production environment - no environment prefix
+    APP_ENV_HOST="https://{{projectName}}-api.{{domain}}"
+    APP_ENV_UI="https://{{projectName}}-ui.{{domain}}"
+else
+    # Non-production environment - include environment prefix
+    APP_ENV_HOST="https://{{projectName}}-${ENV_FOR_SECRET}-api.{{domain}}"
+    APP_ENV_UI="https://{{projectName}}-${ENV_FOR_SECRET}-ui.{{domain}}"
+fi
+
+echo "APP_ENV_HOST=$APP_ENV_HOST" >> "$TEMP_DJANGO_ENV"
+echo "APP_ENV_UI=$APP_ENV_UI" >> "$TEMP_DJANGO_ENV"
+echo "Set APP_ENV_HOST=$APP_ENV_HOST"
+echo "Set APP_ENV_UI=$APP_ENV_UI"
+
+# Fetch secrets from AWS Secrets Manager
+echo "=== Fetching secrets from AWS Secrets Manager ==="
+echo "Looking for secrets: $APP_SECRET_NAME"
+
+if aws secretsmanager get-secret-value --secret-id "$APP_SECRET_NAME" --query 'SecretString' --output text >/dev/null 2>&1; then
+    echo "Found secrets: $APP_SECRET_NAME"
+
+    # Get the secret value and parse JSON
+    SECRET_JSON=$(aws secretsmanager get-secret-value --secret-id "$APP_SECRET_NAME" --query 'SecretString' --output text)
+
+    if [ $? -eq 0 ] && [ -n "$SECRET_JSON" ]; then
+        echo "Successfully retrieved secrets JSON"
+
+        # Dump all key-value pairs (Django uses direct env vars, no prefix needed)
+        echo "Adding secrets to Django environment:"
+        echo "$SECRET_JSON" | jq -r 'to_entries[] | "\(.key)=\(.value)"' >> "$TEMP_DJANGO_ENV"
+
+        if [ $? -eq 0 ]; then
+            echo "Successfully parsed and added secrets to environment"
+            # Show what we added (mask sensitive values)
+            echo "Environment variables added:"
+            echo "$SECRET_JSON" | jq -r 'to_entries[] | "\(.key)=***MASKED***"'
+        else
+            echo "Failed to parse secret JSON"
+            echo "Secret JSON format may be invalid"
+        fi
+    else
+        echo "Failed to retrieve secret value"
+    fi
+else
+    echo "Secret not found: $APP_SECRET_NAME"
+    echo "Continuing without secrets"
+fi
+
+# Check if we have the minimum required configuration
+if ! grep -q "DATABASE_URL" "$TEMP_DJANGO_ENV"; then
+    echo "Warning: No database configuration found in secrets"
+    echo "Application may fail to start without database connection"
+fi
+
+# Final summary
+echo "Secrets configuration completed"
+
+# Move temp file to final location
+sudo mv "$TEMP_DJANGO_ENV" /opt/{{backendModule.name}}/env/django.env
+sudo chown {{backendModule.name}}:{{backendModule.name}} /opt/{{backendModule.name}}/env/django.env
+sudo chmod 644 /opt/{{backendModule.name}}/env/django.env
+
+echo "Final Django environment configuration:"
+echo "DJANGO_SETTINGS_MODULE=$(grep DJANGO_SETTINGS_MODULE /opt/{{backendModule.name}}/env/django.env | cut -d'=' -f2)"
+echo "Additional environment variables: $(grep -v DJANGO_SETTINGS_MODULE /opt/{{backendModule.name}}/env/django.env | wc -l)"
+
+# 9. Backup existing app
+echo "=== Backing up existing application ==="
+if [ -d "/opt/{{backendModule.name}}/app" ] && [ "$(ls -A /opt/{{backendModule.name}}/app)" ]; then
+    BACKUP_NAME="app.backup.$(date +%Y%m%d_%H%M%S)"
+    sudo mv /opt/{{backendModule.name}}/app /opt/{{backendModule.name}}/backups/$BACKUP_NAME
+    sudo mkdir -p /opt/{{backendModule.name}}/app
+    echo "Existing app backed up as: $BACKUP_NAME"
+else
+    echo "No existing app found, skipping backup"
+fi
+
+# 10. Download new app from S3
+echo "=== Downloading new application from S3 ==="
+if sudo aws s3 sync "s3://{{projectName}}-${ENV_FOR_S3}-ops-${AWS_ACCOUNT_ID}/app/${APP_VERSION}/" /opt/{{backendModule.name}}/app/; then
+    echo "Successfully downloaded app version $APP_VERSION from S3"
+    sudo chown -R {{backendModule.name}}:{{backendModule.name}} /opt/{{backendModule.name}}/app
+else
+    echo "Failed to download app from S3"
+    exit 1
+fi
+
+# 11. Setup Python virtual environment and install dependencies
+echo "=== Setting up Python virtual environment ==="
+cd /opt/{{backendModule.name}}
+
+# Create virtual environment if it doesn't exist
+if [ ! -d "/opt/{{backendModule.name}}/venv/bin" ]; then
+    echo "Creating virtual environment..."
+    sudo -u {{backendModule.name}} python3.12 -m venv /opt/{{backendModule.name}}/venv || sudo -u {{backendModule.name}} python3 -m venv /opt/{{backendModule.name}}/venv
+fi
+
+# Install requirements
+echo "Installing Python dependencies..."
+if [ -f "/opt/{{backendModule.name}}/app/requirements.txt" ]; then
+    sudo -u {{backendModule.name}} /opt/{{backendModule.name}}/venv/bin/pip install --upgrade pip
+    sudo -u {{backendModule.name}} /opt/{{backendModule.name}}/venv/bin/pip install -r /opt/{{backendModule.name}}/app/requirements.txt
+    echo "Python dependencies installed successfully"
+else
+    echo "requirements.txt not found"
+    exit 1
+fi
+
+# 12. Run Django collectstatic
+echo "=== Running Django collectstatic ==="
+cd /opt/{{backendModule.name}}/app
+sudo -u {{backendModule.name}} /opt/{{backendModule.name}}/venv/bin/python manage.py collectstatic --noinput || echo "collectstatic skipped or failed"
+
+# 13. Run Django migrations
+echo "=== Running Django migrations ==="
+sudo -u {{backendModule.name}} /opt/{{backendModule.name}}/venv/bin/python manage.py migrate --noinput || echo "migrations skipped or failed"
+
+# 14. Restart service
+echo "=== Restarting {{backendModule.name}}-api service ==="
+sudo systemctl restart {{backendModule.name}}-api.service
+
+# Verify service is running
+echo "=== Verifying service startup ==="
+sleep 5
+
+RETRY_COUNT=0
+MAX_RETRIES=24
+SLEEP_TIME=10
+
+while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
+    if systemctl is-active --quiet {{backendModule.name}}-api.service; then
+        echo "Service is running successfully!"
+        echo
+        echo "=== Service Status ==="
+        sudo systemctl status {{backendModule.name}}-api.service --no-pager -l
+        echo
+        echo "=== Recent Logs ==="
+        sudo journalctl -u {{backendModule.name}}-api.service -n 10 --no-pager
+        echo
+        echo "=== Current App Version ==="
+        echo "$APP_VERSION"
+        echo
+        echo "=== Initialization and Deployment completed successfully ==="
+        exit 0
+    fi
+
+    RETRY_COUNT=$((RETRY_COUNT + 1))
+    echo "Service not ready yet, waiting... (attempt $RETRY_COUNT/$MAX_RETRIES)"
+    sleep $SLEEP_TIME
+done
+
+# If we get here, the service failed to start
+echo "Service failed to start after $((MAX_RETRIES * SLEEP_TIME)) seconds."
+echo
+echo "=== Service Status ==="
+sudo systemctl status {{backendModule.name}}-api.service --no-pager -l
+echo
+echo "=== Recent Error Logs ==="
+sudo journalctl -u {{backendModule.name}}-api.service -n 20 --no-pager
+exit 1
