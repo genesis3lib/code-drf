@@ -39,64 +39,38 @@ sudo mkdir -p /opt/{{backendModule.name}}/venv
 
 # 3. Install system dependencies
 echo "=== Installing system dependencies ==="
-sudo yum update -y
 
-# Install Python 3.12
-echo "Installing Python 3.12..."
-# Check if Python 3.12 is already installed
-if command -v python3.12 &> /dev/null; then
-    echo "Python 3.12 is already installed:"
-    python3.12 --version
-    PYTHON_CMD="python3.12"
+# Detect OS and use appropriate package manager
+if grep -q "Amazon Linux 2023" /etc/os-release; then
+    echo "Detected Amazon Linux 2023"
+    PKG_MGR="dnf"
+    sudo dnf update -y
 else
-    echo "Installing Python 3.12..."
-    # Check OS version and install accordingly
-    if grep -q "Amazon Linux 2023" /etc/os-release; then
-        echo "Detected Amazon Linux 2023, installing Python 3.12 from packages..."
-        sudo yum install -y python3.12 python3.12-pip python3.12-devel || {
-            echo "Package install failed, trying Python 3.11..."
-            sudo yum install -y python3.11 python3.11-pip python3.11-devel
-        }
-    elif grep -q "Amazon Linux 2" /etc/os-release; then
-        echo "Detected Amazon Linux 2, building Python 3.12 from source..."
-        # Install build dependencies
-        sudo yum groupinstall -y "Development Tools"
-        sudo yum install -y openssl-devel bzip2-devel libffi-devel zlib-devel wget make sqlite-devel
+    echo "Detected Amazon Linux 2 or other"
+    PKG_MGR="yum"
+    sudo yum update -y
+fi
 
-        # Download and compile Python 3.12
-        cd /usr/src
-        sudo wget -q https://www.python.org/ftp/python/3.12.0/Python-3.12.0.tgz
-        sudo tar xzf Python-3.12.0.tgz
-        cd Python-3.12.0
-        sudo ./configure --enable-optimizations --prefix=/usr/local
-        sudo make -j$(nproc)
-        sudo make altinstall
-
-        # Create symlinks for easier access
-        sudo ln -sf /usr/local/bin/python3.12 /usr/local/bin/python3
-        sudo ln -sf /usr/local/bin/pip3.12 /usr/local/bin/pip3
-
-        # Cleanup
-        cd /
-        sudo rm -rf /usr/src/Python-3.12.0*
-
-        echo "Python 3.12 compiled and installed successfully"
+# Install Python 3.11 (available on AL2023 via packages)
+echo "=== Installing Python 3.11 ==="
+if command -v python3.11 &> /dev/null; then
+    echo "Python 3.11 is already installed:"
+    python3.11 --version
+    PYTHON_CMD="python3.11"
+else
+    echo "Installing Python 3.11..."
+    if [ "$PKG_MGR" = "dnf" ]; then
+        # Amazon Linux 2023 - Python 3.11 available via dnf
+        sudo dnf install -y python3.11 python3.11-pip python3.11-devel
     else
-        echo "Unknown Linux distribution, trying default Python installation..."
-        sudo yum install -y python3 python3-pip python3-devel || true
+        # Fallback for other systems
+        sudo yum install -y python3.11 python3.11-pip python3.11-devel || \
+        sudo yum install -y python3 python3-pip python3-devel
     fi
 
     # Verify installation
-    if command -v python3.12 &> /dev/null; then
-        echo "Python 3.12 installed successfully:"
-        python3.12 --version
-        PYTHON_CMD="python3.12"
-    elif command -v /usr/local/bin/python3.12 &> /dev/null; then
-        echo "Python 3.12 installed at /usr/local/bin:"
-        /usr/local/bin/python3.12 --version
-        PYTHON_CMD="/usr/local/bin/python3.12"
-    elif command -v python3.11 &> /dev/null; then
-        echo "Python 3.11 installed:"
+    if command -v python3.11 &> /dev/null; then
+        echo "Python 3.11 installed successfully:"
         python3.11 --version
         PYTHON_CMD="python3.11"
     elif command -v python3 &> /dev/null; then
@@ -113,12 +87,21 @@ fi
 export PYTHON_CMD
 echo "Using Python: $PYTHON_CMD"
 
-# Install PostgreSQL client (try multiple package names for compatibility)
+# Install PostgreSQL client
 echo "Installing PostgreSQL client..."
-sudo yum install -y postgresql postgresql-client || sudo yum install -y postgresql15 || echo "PostgreSQL client installation skipped"
+if [ "$PKG_MGR" = "dnf" ]; then
+    sudo dnf install -y postgresql15 || sudo dnf install -y postgresql || echo "PostgreSQL client installation skipped"
+else
+    sudo yum install -y postgresql postgresql-client || sudo yum install -y postgresql15 || echo "PostgreSQL client installation skipped"
+fi
 
 # Install other dependencies
-sudo yum install -y awscli jq wget curl unzip gcc
+echo "Installing other dependencies..."
+if [ "$PKG_MGR" = "dnf" ]; then
+    sudo dnf install -y awscli jq wget curl unzip gcc
+else
+    sudo yum install -y awscli jq wget curl unzip gcc
+fi
 
 echo "=== Verifying installed packages ==="
 $PYTHON_CMD --version
@@ -324,10 +307,48 @@ fi
 echo "=== Setting up Python virtual environment ==="
 cd /opt/{{backendModule.name}}
 
-# Create virtual environment if it doesn't exist
-if [ ! -d "/opt/{{backendModule.name}}/venv/bin" ]; then
+# Get required Python version (major.minor)
+REQUIRED_PYTHON_VERSION=$($PYTHON_CMD --version 2>&1 | cut -d' ' -f2 | cut -d'.' -f1,2)
+echo "Required Python version: $REQUIRED_PYTHON_VERSION"
+
+# Check if venv exists and has correct Python version
+RECREATE_VENV="false"
+if [ -d "/opt/{{backendModule.name}}/venv/bin" ]; then
+    if [ -f "/opt/{{backendModule.name}}/venv/bin/python" ]; then
+        VENV_PYTHON_VERSION=$(/opt/{{backendModule.name}}/venv/bin/python --version 2>&1 | cut -d' ' -f2 | cut -d'.' -f1,2)
+        echo "Existing venv Python version: $VENV_PYTHON_VERSION"
+        if [ "$VENV_PYTHON_VERSION" != "$REQUIRED_PYTHON_VERSION" ]; then
+            echo "Python version mismatch! Venv has $VENV_PYTHON_VERSION but need $REQUIRED_PYTHON_VERSION"
+            RECREATE_VENV="true"
+        else
+            echo "Venv Python version matches required version"
+        fi
+    else
+        echo "Venv exists but Python binary not found - will recreate"
+        RECREATE_VENV="true"
+    fi
+else
+    echo "No existing venv found - will create new one"
+    RECREATE_VENV="true"
+fi
+
+# Delete and recreate venv if needed
+if [ "$RECREATE_VENV" = "true" ]; then
+    echo "Removing old venv and creating new one with Python $REQUIRED_PYTHON_VERSION..."
+    sudo rm -rf /opt/{{backendModule.name}}/venv
+    sudo mkdir -p /opt/{{backendModule.name}}/venv
+    sudo chown {{backendModule.name}}:{{backendModule.name}} /opt/{{backendModule.name}}/venv
     echo "Creating virtual environment using $PYTHON_CMD..."
     sudo -u {{backendModule.name}} $PYTHON_CMD -m venv /opt/{{backendModule.name}}/venv
+
+    # Verify venv was created with correct Python
+    if [ -f "/opt/{{backendModule.name}}/venv/bin/python" ]; then
+        CREATED_VERSION=$(/opt/{{backendModule.name}}/venv/bin/python --version 2>&1)
+        echo "Venv created with: $CREATED_VERSION"
+    else
+        echo "Failed to create venv!"
+        exit 1
+    fi
 fi
 
 # Install requirements
