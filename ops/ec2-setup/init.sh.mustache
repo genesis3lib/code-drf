@@ -96,7 +96,7 @@ else
 fi
 
 # Install other dependencies
-# Note: Don't install 'curl' on AL2023 - it has curl-minimal pre-installed which conflicts with curl
+# Note: Don't install 'curl' on AL2023 - curl-minimal is pre-installed and provides the curl command
 echo "Installing other dependencies..."
 if [ "$PKG_MGR" = "dnf" ]; then
     sudo dnf install -y awscli jq wget unzip gcc
