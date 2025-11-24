@@ -28,7 +28,7 @@ if extra_hosts:
     ALLOWED_HOSTS.extend([h.strip() for h in extra_hosts.split(',') if h.strip()])
 
 # Database - Must be configured via environment variables (e.g., PostgreSQL)
-# This will be overridden by extension-database if selected
+# This will be overridden by extension-rdbms if selected
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.sqlite3',

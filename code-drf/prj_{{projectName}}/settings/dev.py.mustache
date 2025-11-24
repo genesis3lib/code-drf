@@ -13,7 +13,7 @@ DEBUG = True
 
 ALLOWED_HOSTS = ['localhost', '127.0.0.1', '{{{projectName}}}-api-dev.{{{domain}}}']
 
-# Database - SQLite for development (override with extension-database for PostgreSQL/MySQL)
+# Database - SQLite for development (override with extension-rdbms for PostgreSQL/MySQL)
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.sqlite3',
