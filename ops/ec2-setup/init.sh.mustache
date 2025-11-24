@@ -41,7 +41,7 @@ sudo mkdir -p /opt/{{backendModule.name}}/venv
 echo "=== Installing system dependencies ==="
 
 # Detect OS and use appropriate package manager
-if grep -q "Amazon Linux 2023" /etc/os-release; then
+if grep -q "Amazon Linux 2023" /etc/os-release 2>/dev/null; then
     echo "Detected Amazon Linux 2023"
     PKG_MGR="dnf"
     sudo dnf update -y
@@ -265,10 +265,36 @@ else
     echo "Continuing without secrets"
 fi
 
-# Check if we have the minimum required configuration
-if ! grep -q "DATABASE_URL" "$TEMP_DJANGO_ENV"; then
-    echo "Warning: No database configuration found in secrets"
-    echo "Application may fail to start without database connection"
+# Construct DATABASE_URL from individual DB_* fields if not already present
+if ! grep -q "^DATABASE_URL=" "$TEMP_DJANGO_ENV"; then
+    echo "DATABASE_URL not found, checking for individual DB_* fields..."
+
+    # Extract individual DB fields from secrets
+    DB_ENGINE=$(echo "$SECRET_JSON" | jq -r '.DB_ENGINE // empty')
+    DB_HOST=$(echo "$SECRET_JSON" | jq -r '.DB_HOST // empty')
+    DB_PORT=$(echo "$SECRET_JSON" | jq -r '.DB_PORT // empty')
+    DB_NAME=$(echo "$SECRET_JSON" | jq -r '.DB_NAME // empty')
+    DB_USERNAME=$(echo "$SECRET_JSON" | jq -r '.DB_USERNAME // empty')
+    DB_PASSWORD=$(echo "$SECRET_JSON" | jq -r '.DB_PASSWORD // empty')
+
+    if [ -n "$DB_HOST" ] && [ -n "$DB_NAME" ] && [ -n "$DB_USERNAME" ]; then
+        # URL-encode the password (handle special characters)
+        ENCODED_PASSWORD=$(python3 -c "import urllib.parse; print(urllib.parse.quote('$DB_PASSWORD', safe=''))")
+
+        # Default engine to postgres if not specified
+        DB_ENGINE=${DB_ENGINE:-postgres}
+        DB_PORT=${DB_PORT:-5432}
+
+        # Construct DATABASE_URL
+        DATABASE_URL="postgresql://${DB_USERNAME}:${ENCODED_PASSWORD}@${DB_HOST}:${DB_PORT}/${DB_NAME}"
+        echo "DATABASE_URL=$DATABASE_URL" >> "$TEMP_DJANGO_ENV"
+        echo "Constructed DATABASE_URL from DB_* fields"
+    else
+        echo "Warning: No database configuration found in secrets"
+        echo "Application may fail to start without database connection"
+    fi
+else
+    echo "DATABASE_URL already present in secrets"
 fi
 
 # Final summary
