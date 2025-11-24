@@ -96,9 +96,10 @@ else
 fi
 
 # Install other dependencies
+# Note: Don't install 'curl' on AL2023 - it has curl-minimal pre-installed which conflicts with curl
 echo "Installing other dependencies..."
 if [ "$PKG_MGR" = "dnf" ]; then
-    sudo dnf install -y awscli jq wget curl unzip gcc
+    sudo dnf install -y awscli jq wget unzip gcc
 else
     sudo yum install -y awscli jq wget curl unzip gcc
 fi
