@@ -11,6 +11,6 @@ def health_check(request):
     """
     return Response({
         'status': 'healthy',
-        'service': '{{projectName}}-api',
+        'service': '{{{projectName}}}-api',
         'version': '1.0.0'
     }, status=status.HTTP_200_OK)
