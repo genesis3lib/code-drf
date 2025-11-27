@@ -244,15 +244,15 @@ if aws secretsmanager get-secret-value --secret-id "$APP_SECRET_NAME" --query 'S
     if [ $? -eq 0 ] && [ -n "$SECRET_JSON" ]; then
         echo "Successfully retrieved secrets JSON"
 
-        # Dump all key-value pairs (Django uses direct env vars, no prefix needed)
+        # Dump all key-value pairs with PYTHON_DRF_ prefix
         echo "Adding secrets to Django environment:"
-        echo "$SECRET_JSON" | jq -r 'to_entries[] | "\(.key)=\(.value)"' >> "$TEMP_DJANGO_ENV"
+        echo "$SECRET_JSON" | jq -r 'to_entries[] | "PYTHON_DRF_\(.key)=\(.value)"' >> "$TEMP_DJANGO_ENV"
 
         if [ $? -eq 0 ]; then
             echo "Successfully parsed and added secrets to environment"
             # Show what we added (mask sensitive values)
             echo "Environment variables added:"
-            echo "$SECRET_JSON" | jq -r 'to_entries[] | "\(.key)=***MASKED***"'
+            echo "$SECRET_JSON" | jq -r 'to_entries[] | "PYTHON_DRF_\(.key)=***MASKED***"'
         else
             echo "Failed to parse secret JSON"
             echo "Secret JSON format may be invalid"
@@ -266,16 +266,16 @@ else
 fi
 
 # Construct DATABASE_URL from individual DB_* fields if not already present
-if ! grep -q "^DATABASE_URL=" "$TEMP_DJANGO_ENV"; then
+if ! grep -q "^PYTHON_DRF_DATABASE_URL=" "$TEMP_DJANGO_ENV"; then
     echo "DATABASE_URL not found, checking for individual DB_* fields..."
 
-    # Extract individual DB fields from secrets
-    DB_ENGINE=$(echo "$SECRET_JSON" | jq -r '.DB_ENGINE // empty')
-    DB_HOST=$(echo "$SECRET_JSON" | jq -r '.DB_HOST // empty')
-    DB_PORT=$(echo "$SECRET_JSON" | jq -r '.DB_PORT // empty')
-    DB_NAME=$(echo "$SECRET_JSON" | jq -r '.DB_NAME // empty')
-    DB_USERNAME=$(echo "$SECRET_JSON" | jq -r '.DB_USERNAME // empty')
-    DB_PASSWORD=$(echo "$SECRET_JSON" | jq -r '.DB_PASSWORD // empty')
+    # Extract individual DB fields from secrets (already have PYTHON_DRF_ prefix)
+    DB_ENGINE=$(grep "^PYTHON_DRF_DB_ENGINE=" "$TEMP_DJANGO_ENV" | cut -d'=' -f2)
+    DB_HOST=$(grep "^PYTHON_DRF_DB_HOST=" "$TEMP_DJANGO_ENV" | cut -d'=' -f2)
+    DB_PORT=$(grep "^PYTHON_DRF_DB_PORT=" "$TEMP_DJANGO_ENV" | cut -d'=' -f2)
+    DB_NAME=$(grep "^PYTHON_DRF_DB_NAME=" "$TEMP_DJANGO_ENV" | cut -d'=' -f2)
+    DB_USERNAME=$(grep "^PYTHON_DRF_DB_USERNAME=" "$TEMP_DJANGO_ENV" | cut -d'=' -f2)
+    DB_PASSWORD=$(grep "^PYTHON_DRF_DB_PASSWORD=" "$TEMP_DJANGO_ENV" | cut -d'=' -f2)
 
     if [ -n "$DB_HOST" ] && [ -n "$DB_NAME" ] && [ -n "$DB_USERNAME" ]; then
         # URL-encode the password (handle special characters)
@@ -287,7 +287,7 @@ if ! grep -q "^DATABASE_URL=" "$TEMP_DJANGO_ENV"; then
 
         # Construct DATABASE_URL
         DATABASE_URL="postgresql://${DB_USERNAME}:${ENCODED_PASSWORD}@${DB_HOST}:${DB_PORT}/${DB_NAME}"
-        echo "DATABASE_URL=$DATABASE_URL" >> "$TEMP_DJANGO_ENV"
+        echo "PYTHON_DRF_DATABASE_URL=$DATABASE_URL" >> "$TEMP_DJANGO_ENV"
         echo "Constructed DATABASE_URL from DB_* fields"
     else
         echo "Warning: No database configuration found in secrets"
