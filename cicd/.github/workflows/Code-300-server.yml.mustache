@@ -140,7 +140,13 @@ jobs:
       - name: Deploy - Add build info
         run: |
           mkdir -p {{backendModule.moduleId}}
-          echo -e "gh.build={{{githubVarsOpen}}} github.run_number  {{{githubVarsClose}}}\ngh.attempt={{{githubVarsOpen}}} github.run_attempt  {{{githubVarsClose}}}\ngh.action={{{githubVarsOpen}}} github.action  {{{githubVarsClose}}}\ngh.modifiedDate={{{githubVarsOpen}}} github.event.repository.updated_at  {{{githubVarsClose}}}\ngh.sha=$( git rev-parse --short HEAD )" > {{backendModule.moduleId}}/version.properties
+          echo "version = {" > {{backendModule.moduleId}}/version.py
+          echo "    'gh.build': '{{{githubVarsOpen}}} github.run_number {{{githubVarsClose}}}'," >> {{backendModule.moduleId}}/version.py
+          echo "    'gh.attempt': '{{{githubVarsOpen}}} github.run_attempt {{{githubVarsClose}}}'," >> {{backendModule.moduleId}}/version.py
+          echo "    'gh.action': '{{{githubVarsOpen}}} github.action {{{githubVarsClose}}}'," >> {{backendModule.moduleId}}/version.py
+          echo "    'gh.modifiedDate': '{{{githubVarsOpen}}} github.event.repository.updated_at {{{githubVarsClose}}}'," >> {{backendModule.moduleId}}/version.py
+          echo "    'gh.sha': '$(git rev-parse --short HEAD)'" >> {{backendModule.moduleId}}/version.py
+          echo "}" >> {{backendModule.moduleId}}/version.py
 
       - name: Deploy - Run Tests
         run: |
