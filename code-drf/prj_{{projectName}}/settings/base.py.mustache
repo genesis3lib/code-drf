@@ -73,3 +73,18 @@ REST_FRAMEWORK = {
     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
     'PAGE_SIZE': 100,
 }
+
+# Public URIs that don't require authentication
+# Used by auth middleware to skip authentication for certain paths
+PUBLIC_URIS = [
+    '/',
+    '/api/v1/public/*',
+    '/health',
+    '/admin/*',
+    '/static/*',
+    '/media/*',
+]
+
+# Root and admin users for role assignment (set via environment variables)
+APP_USERS_ROOT = os.environ.get('APP_USERS_ROOT', '')
+APP_USERS_ADMINS = os.environ.get('APP_USERS_ADMINS', '')
