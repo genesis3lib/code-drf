@@ -2,6 +2,8 @@ from rest_framework.decorators import api_view
 from rest_framework.response import Response
 from rest_framework import status
 from version import version as build_version
+from datetime import datetime
+import uuid
 
 
 @api_view(['GET'])
@@ -9,10 +11,16 @@ def health_check(request):
     """
     Health check endpoint.
     Returns 200 OK if the service is running.
+    Follows ResponseBody wrapper pattern for consistency with Spring Boot backend.
     """
     return Response({
-        'status': 'healthy',
-        'service': '{{{projectName}}}-api',
-        'version': '1.0.0',
-        'build': build_version
+        'requestId': str(uuid.uuid4()),
+        'faults': None,
+        'response': {
+            'status': 'UP',
+            'service': '{{{projectName}}}-api',
+            'version': '1.0.0',
+            'timestamp': datetime.now().isoformat(),
+            'build': build_version
+        }
     }, status=status.HTTP_200_OK)
