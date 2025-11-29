@@ -221,9 +221,9 @@ if [ "$ENV_FOR_SECRET" = "prod" ] || [ "$ENV_FOR_SECRET" = "production" ]; then
     APP_ENV_HOST="https://{{projectName}}-api.{{domain}}"
     APP_ENV_UI="https://{{projectName}}-ui.{{domain}}"
 else
-    # Non-production environment - include environment prefix
-    APP_ENV_HOST="https://{{projectName}}-${ENV_FOR_SECRET}-api.{{domain}}"
-    APP_ENV_UI="https://{{projectName}}-${ENV_FOR_SECRET}-ui.{{domain}}"
+    # Non-production environment - include environment suffix
+    APP_ENV_HOST="https://{{projectName}}-api-${ENV_FOR_SECRET}.{{domain}}"
+    APP_ENV_UI="https://{{projectName}}-ui-${ENV_FOR_SECRET}.{{domain}}"
 fi
 
 echo "APP_ENV_HOST=$APP_ENV_HOST" >> "$TEMP_DJANGO_ENV"
