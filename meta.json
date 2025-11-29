@@ -80,7 +80,44 @@
       "pytest-django==4.8.0"
     ]
   },
-  "runtimeConfigTemplate": [],
+  "runtimeConfigTemplate": [
+    {
+      "key": "APP_NAME",
+      "description": "Application name",
+      "example": "{{projectName}}",
+      "default": "runtime",
+      "required": false,
+      "secret": false,
+      "targets": [
+        "backend"
+      ],
+      "commonForAllEnv": true
+    },
+    {
+      "key": "APP_ENV_HOST",
+      "description": "Backend API base URL",
+      "example": "https://{{projectName}}-api{{envSuffix}}.{{domain}}",
+      "default": "runtime",
+      "required": true,
+      "secret": false,
+      "targets": [
+        "backend"
+      ],
+      "commonForAllEnv": false
+    },
+    {
+      "key": "APP_ENV_UI",
+      "description": "Frontend application URL",
+      "example": "https://{{projectName}}{{envSuffix}}.{{domain}}",
+      "default": "runtime",
+      "required": true,
+      "secret": false,
+      "targets": [
+        "backend"
+      ],
+      "commonForAllEnv": false
+    }
+  ],
   "generation": {
     "files": {
       "remove": []
@@ -89,5 +126,53 @@
       "backend": {},
       "cicd": {}
     }
-  }
+  },
+  "gitignore": [
+    "# Python",
+    "__pycache__/",
+    "*.py[cod]",
+    "*$py.class",
+    "*.so",
+    ".Python",
+    "build/",
+    "develop-eggs/",
+    "dist/",
+    "downloads/",
+    "eggs/",
+    ".eggs/",
+    "lib/",
+    "lib64/",
+    "parts/",
+    "sdist/",
+    "var/",
+    "wheels/",
+    "*.egg-info/",
+    ".installed.cfg",
+    "*.egg",
+    "",
+    "# Virtual environments",
+    "venv/",
+    "ENV/",
+    "env/",
+    ".venv/",
+    "",
+    "# Django",
+    "*.log",
+    "local_settings.py",
+    "db.sqlite3",
+    "db.sqlite3-journal",
+    "staticfiles/",
+    "media/",
+    "",
+    "# pytest",
+    ".pytest_cache/",
+    ".coverage",
+    "htmlcov/",
+    "",
+    "# IDE",
+    ".idea/",
+    ".vscode/",
+    "*.swp",
+    "*.swo"
+  ]
 }

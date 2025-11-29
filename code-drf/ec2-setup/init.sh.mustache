@@ -393,10 +393,10 @@ fi
 echo "=== Creating database schema if needed ==="
 cd /opt/{{backendModule.name}}/app
 
-# Get schema name from env or default to project name
+# Get schema name from env or default to backend module name (matching Spring Boot pattern)
 DB_SCHEMA=$(grep "^PYTHON_DRF_DATABASE_SCHEMA=" /opt/{{backendModule.name}}/env/django.env 2>/dev/null | cut -d'=' -f2)
 if [ -z "$DB_SCHEMA" ]; then
-    DB_SCHEMA="{{projectName}}"
+    DB_SCHEMA="{{backendModule.name}}"
 fi
 echo "Database schema: $DB_SCHEMA"
 
