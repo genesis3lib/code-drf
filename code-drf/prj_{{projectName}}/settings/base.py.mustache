@@ -14,6 +14,7 @@ INSTALLED_APPS = [
     'django.contrib.contenttypes',
     'django.contrib.staticfiles',
     'rest_framework',
+    'drf_spectacular',
     'corsheaders',
     'app_basic',
 ]
@@ -72,6 +73,29 @@ REST_FRAMEWORK = {
     'UNAUTHENTICATED_USER': None,
     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
     'PAGE_SIZE': 100,
+    'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
+}
+
+# drf-spectacular OpenAPI settings
+# Access Swagger UI at: /api/schema/swagger-ui/
+# Access OpenAPI JSON at: /api/schema/
+SPECTACULAR_SETTINGS = {
+    'TITLE': '{{{projectName}}} API',
+    'DESCRIPTION': 'REST API documentation for {{{projectName}}}',
+    'VERSION': '{{{version}}}',
+    'CONTACT': {'email': '{{{owner}}}'},
+    'LICENSE': {'name': '{{license}}'},
+    'SERVE_INCLUDE_SCHEMA': False,
+    'SECURITY': [{'bearerAuth': []}],
+    'COMPONENTS': {
+        'securitySchemes': {
+            'bearerAuth': {
+                'type': 'http',
+                'scheme': 'bearer',
+                'bearerFormat': 'JWT',
+            }
+        }
+    },
 }
 
 # Public URIs that don't require authentication
