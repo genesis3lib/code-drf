@@ -14,15 +14,25 @@ SECRET_KEY = os.getenv('DJANGO_SECRET_KEY', secrets.token_urlsafe(50))
 DEBUG = False
 
 # Production hosts - includes localhost for health checks from ALB
-# Additional hosts can be added via DJANGO_ALLOWED_HOSTS environment variable (comma-separated)
+# APP_ENV_HOST is set by init.sh based on environment (e.g., https://myapp-api.example.com)
 ALLOWED_HOSTS = [
     'localhost',
     '127.0.0.1',
-    '{{{projectName}}}-api.{{{domain}}}',
-    '{{{projectName}}}-api-prod.{{{domain}}}',
 ]
 
-# Allow additional hosts from environment variable
+# Parse APP_ENV_HOST to extract hostname for ALLOWED_HOSTS
+app_env_host = os.getenv('APP_ENV_HOST', '')
+if app_env_host:
+    # Extract hostname from URL (e.g., https://myapp-api.example.com -> myapp-api.example.com)
+    from urllib.parse import urlparse
+    parsed = urlparse(app_env_host)
+    if parsed.netloc:
+        ALLOWED_HOSTS.append(parsed.netloc)
+    elif parsed.path:
+        # Handle case where URL is just hostname without scheme
+        ALLOWED_HOSTS.append(parsed.path)
+
+# Allow additional hosts from environment variable (comma-separated)
 extra_hosts = os.getenv('DJANGO_ALLOWED_HOSTS', '')
 if extra_hosts:
     ALLOWED_HOSTS.extend([h.strip() for h in extra_hosts.split(',') if h.strip()])
@@ -37,10 +47,17 @@ DATABASES = {
 }
 
 # CORS settings - Production frontend origins
-CORS_ALLOWED_ORIGINS = [
-    'https://{{{projectName}}}.{{{domain}}}',
-    'https://{{{projectName}}}-prod.{{{domain}}}',
-]
+# APP_ENV_UI is set by init.sh based on environment (e.g., https://myapp-ui.example.com)
+CORS_ALLOWED_ORIGINS = []
+
+app_env_ui = os.getenv('APP_ENV_UI', '')
+if app_env_ui:
+    CORS_ALLOWED_ORIGINS.append(app_env_ui)
+
+# Allow additional CORS origins from environment variable (comma-separated)
+extra_origins = os.getenv('CORS_ALLOWED_ORIGINS', '')
+if extra_origins:
+    CORS_ALLOWED_ORIGINS.extend([o.strip() for o in extra_origins.split(',') if o.strip()])
 
 CORS_ALLOW_CREDENTIALS = True
 
