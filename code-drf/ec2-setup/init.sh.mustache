@@ -389,16 +389,49 @@ else
     exit 1
 fi
 
-# 12. Run Django collectstatic
-echo "=== Running Django collectstatic ==="
+# 12. Create database schema if needed (matching Spring Boot behavior)
+echo "=== Creating database schema if needed ==="
 cd /opt/{{backendModule.name}}/app
+
+# Get schema name from env or default to project name
+DB_SCHEMA=$(grep "^PYTHON_DRF_DATABASE_SCHEMA=" /opt/{{backendModule.name}}/env/django.env 2>/dev/null | cut -d'=' -f2)
+if [ -z "$DB_SCHEMA" ]; then
+    DB_SCHEMA="{{projectName}}"
+fi
+echo "Database schema: $DB_SCHEMA"
+
+# Extract database connection info from django.env
+DB_HOST=$(grep "^PYTHON_DRF_DB_HOST=" /opt/{{backendModule.name}}/env/django.env 2>/dev/null | cut -d'=' -f2)
+DB_PORT=$(grep "^PYTHON_DRF_DB_PORT=" /opt/{{backendModule.name}}/env/django.env 2>/dev/null | cut -d'=' -f2)
+DB_NAME=$(grep "^PYTHON_DRF_DB_NAME=" /opt/{{backendModule.name}}/env/django.env 2>/dev/null | cut -d'=' -f2)
+DB_USERNAME=$(grep "^PYTHON_DRF_DB_USERNAME=" /opt/{{backendModule.name}}/env/django.env 2>/dev/null | cut -d'=' -f2)
+DB_PASSWORD=$(grep "^PYTHON_DRF_DB_PASSWORD=" /opt/{{backendModule.name}}/env/django.env 2>/dev/null | cut -d'=' -f2)
+
+# Default port
+DB_PORT=${DB_PORT:-5432}
+
+if [ -n "$DB_HOST" ] && [ -n "$DB_NAME" ] && [ -n "$DB_USERNAME" ]; then
+    echo "Creating schema '$DB_SCHEMA' if it doesn't exist..."
+    PGPASSWORD="$DB_PASSWORD" psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USERNAME" -d "$DB_NAME" -c "CREATE SCHEMA IF NOT EXISTS $DB_SCHEMA;" 2>&1 || echo "Schema creation skipped or already exists"
+    echo "✅ Schema '$DB_SCHEMA' ready"
+
+    # Also add schema to django.env for the app to use
+    if ! grep -q "^PYTHON_DRF_DATABASE_SCHEMA=" /opt/{{backendModule.name}}/env/django.env; then
+        echo "PYTHON_DRF_DATABASE_SCHEMA=$DB_SCHEMA" | sudo tee -a /opt/{{backendModule.name}}/env/django.env > /dev/null
+    fi
+else
+    echo "⚠️ Database connection info incomplete, skipping schema creation"
+fi
+
+# 13. Run Django collectstatic
+echo "=== Running Django collectstatic ==="
 sudo -u {{backendModule.name}} /opt/{{backendModule.name}}/venv/bin/python manage.py collectstatic --noinput || echo "collectstatic skipped or failed"
 
-# 13. Run Django migrations
+# 14. Run Django migrations
 echo "=== Running Django migrations ==="
 sudo -u {{backendModule.name}} /opt/{{backendModule.name}}/venv/bin/python manage.py migrate --noinput || echo "migrations skipped or failed"
 
-# 14. Restart service
+# 15. Restart service
 echo "=== Restarting {{backendModule.name}}-api service ==="
 sudo systemctl restart {{backendModule.name}}-api.service
 

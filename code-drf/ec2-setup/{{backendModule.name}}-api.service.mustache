@@ -1,6 +1,7 @@
 [Unit]
 Description={{projectName}} API Service (Gunicorn)
 After=network.target
+Wants=network.target
 
 [Service]
 Type=notify
@@ -18,11 +19,23 @@ ExecStart=/opt/{{backendModule.name}}/venv/bin/gunicorn \
     --timeout 120 \
     prj_{{projectName}}.wsgi:application
 ExecReload=/bin/kill -s HUP $MAINPID
+Restart=always
+RestartSec=10
 KillMode=mixed
 TimeoutStopSec=5
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier={{backendModule.name}}
+
+# Security settings
+NoNewPrivileges=true
 PrivateTmp=true
-Restart=on-failure
-RestartSec=5
+ProtectSystem=strict
+ReadWritePaths=/opt/{{backendModule.name}}
+
+# Resource limits (optional - adjust as needed)
+LimitNOFILE=65536
+LimitNPROC=4096
 
 [Install]
 WantedBy=multi-user.target
