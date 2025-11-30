@@ -48,33 +48,33 @@ if app_env_host:
 extra_hosts = os.getenv('DJANGO_ALLOWED_HOSTS', '')
 if extra_hosts:
     ALLOWED_HOSTS.extend([h.strip() for h in extra_hosts.split(',') if h.strip()])
+{{/isProduction}}
 
 # Add EC2 private IP for ALB health checks (ALB uses private IP as Host header)
-# This fetches the instance's private IP from EC2 metadata service
+# This fetches the instance's private IP from EC2 metadata service (IMDSv2)
+# Works on any EC2 instance regardless of environment (dev, staging, prod, etc.)
 try:
     import urllib.request
     # IMDSv2 requires a token
-    token_request = urllib.request.Request(
+    _token_request = urllib.request.Request(
         'http://169.254.169.254/latest/api/token',
         headers={'X-aws-ec2-metadata-token-ttl-seconds': '21600'},
         method='PUT'
     )
-    with urllib.request.urlopen(token_request, timeout=1) as response:
-        token = response.read().decode()
+    with urllib.request.urlopen(_token_request, timeout=1) as _response:
+        _token = _response.read().decode()
 
-    ip_request = urllib.request.Request(
+    _ip_request = urllib.request.Request(
         'http://169.254.169.254/latest/meta-data/local-ipv4',
-        headers={'X-aws-ec2-metadata-token': token}
+        headers={'X-aws-ec2-metadata-token': _token}
     )
-    with urllib.request.urlopen(ip_request, timeout=1) as response:
-        ec2_private_ip = response.read().decode().strip()
-        if ec2_private_ip:
-            ALLOWED_HOSTS.append(ec2_private_ip)
-            logger.info(f"Added EC2 private IP to ALLOWED_HOSTS: {ec2_private_ip}")
-except Exception as e:
-    # Not running on EC2 or metadata service unavailable - ignore
-    logger.debug(f"Could not fetch EC2 metadata (not on EC2 or IMDS unavailable): {e}")
-{{/isProduction}}
+    with urllib.request.urlopen(_ip_request, timeout=1) as _response:
+        _ec2_private_ip = _response.read().decode().strip()
+        if _ec2_private_ip:
+            ALLOWED_HOSTS.append(_ec2_private_ip)
+except Exception:
+    # Not running on EC2 or metadata service unavailable - ignore silently
+    pass
 
 # Database - Try to import from database.py (added by extension-rdbms)
 # Falls back to SQLite if database.py doesn't exist
