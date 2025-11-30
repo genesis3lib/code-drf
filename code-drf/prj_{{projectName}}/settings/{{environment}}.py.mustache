@@ -1,0 +1,125 @@
+"""
+{{environment}} settings for {{{projectName}}} project.
+"""
+
+from .base import *
+import os
+{{#isProduction}}
+import secrets
+import logging
+
+logger = logging.getLogger(__name__)
+{{/isProduction}}
+
+{{#isProduction}}
+# SECURITY WARNING: keep the secret key used in production secret!
+# Generate a secure random key - in production, use environment variable or secrets manager
+SECRET_KEY = os.getenv('DJANGO_SECRET_KEY', secrets.token_urlsafe(50))
+
+# SECURITY WARNING: don't run with debug turned on in production!
+DEBUG = False
+{{/isProduction}}
+{{^isProduction}}
+# SECURITY WARNING: keep the secret key used in production secret!
+SECRET_KEY = 'django-insecure-{{environment}}-{{{projectName}}}-change-in-production'
+
+# SECURITY WARNING: don't run with debug turned on in production!
+DEBUG = True
+{{/isProduction}}
+
+# Allowed hosts
+ALLOWED_HOSTS = [
+    'localhost',
+    '127.0.0.1',
+]
+
+# Add host from APP_ENV_HOST if set
+app_env_host = os.getenv('APP_ENV_HOST', '')
+if app_env_host:
+    from urllib.parse import urlparse
+    parsed = urlparse(app_env_host)
+    if parsed.netloc:
+        ALLOWED_HOSTS.append(parsed.netloc)
+    elif parsed.path:
+        ALLOWED_HOSTS.append(parsed.path)
+
+{{#isProduction}}
+# Allow additional hosts from environment variable (comma-separated)
+extra_hosts = os.getenv('DJANGO_ALLOWED_HOSTS', '')
+if extra_hosts:
+    ALLOWED_HOSTS.extend([h.strip() for h in extra_hosts.split(',') if h.strip()])
+
+# Add EC2 private IP for ALB health checks (ALB uses private IP as Host header)
+# This fetches the instance's private IP from EC2 metadata service
+try:
+    import urllib.request
+    # IMDSv2 requires a token
+    token_request = urllib.request.Request(
+        'http://169.254.169.254/latest/api/token',
+        headers={'X-aws-ec2-metadata-token-ttl-seconds': '21600'},
+        method='PUT'
+    )
+    with urllib.request.urlopen(token_request, timeout=1) as response:
+        token = response.read().decode()
+
+    ip_request = urllib.request.Request(
+        'http://169.254.169.254/latest/meta-data/local-ipv4',
+        headers={'X-aws-ec2-metadata-token': token}
+    )
+    with urllib.request.urlopen(ip_request, timeout=1) as response:
+        ec2_private_ip = response.read().decode().strip()
+        if ec2_private_ip:
+            ALLOWED_HOSTS.append(ec2_private_ip)
+            logger.info(f"Added EC2 private IP to ALLOWED_HOSTS: {ec2_private_ip}")
+except Exception as e:
+    # Not running on EC2 or metadata service unavailable - ignore
+    logger.debug(f"Could not fetch EC2 metadata (not on EC2 or IMDS unavailable): {e}")
+{{/isProduction}}
+
+# Database - Try to import from database.py (added by extension-rdbms)
+# Falls back to SQLite if database.py doesn't exist
+try:
+    from .database import DATABASES, DB_SCHEMA
+except ImportError:
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.sqlite3',
+            'NAME': BASE_DIR / 'db.sqlite3',
+        }
+    }
+
+# CORS settings
+CORS_ALLOWED_ORIGINS = []
+
+{{^isProduction}}
+# Development: Allow common local frontend ports
+CORS_ALLOWED_ORIGINS.extend([
+    'http://localhost:3000',
+    'http://localhost:5173',
+])
+{{/isProduction}}
+
+# Add UI origin from APP_ENV_UI if set
+app_env_ui = os.getenv('APP_ENV_UI', '')
+if app_env_ui:
+    CORS_ALLOWED_ORIGINS.append(app_env_ui)
+
+{{#isProduction}}
+# Allow additional CORS origins from environment variable (comma-separated)
+extra_origins = os.getenv('CORS_ALLOWED_ORIGINS', '')
+if extra_origins:
+    CORS_ALLOWED_ORIGINS.extend([o.strip() for o in extra_origins.split(',') if o.strip()])
+{{/isProduction}}
+
+CORS_ALLOW_CREDENTIALS = True
+
+{{#isProduction}}
+# Security settings for running behind ALB/proxy
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+SECURE_SSL_REDIRECT = False
+SESSION_COOKIE_SECURE = True
+CSRF_COOKIE_SECURE = True
+SECURE_BROWSER_XSS_FILTER = True
+SECURE_CONTENT_TYPE_NOSNIFF = True
+X_FRAME_OPTIONS = 'DENY'
+{{/isProduction}}
