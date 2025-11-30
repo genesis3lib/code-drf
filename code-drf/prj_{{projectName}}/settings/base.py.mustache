@@ -60,7 +60,8 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 # REST Framework
 # Note: UNAUTHENTICATED_USER=None prevents DRF from referencing auth models
-# when authentication is not enabled. Auth can be added via extension-auth0.
+# when authentication is not enabled. Auth extensions (auth0, okta, stytch) will
+# override DEFAULT_AUTHENTICATION_CLASSES and DEFAULT_PERMISSION_CLASSES.
 REST_FRAMEWORK = {
     'DEFAULT_RENDERER_CLASSES': [
         'rest_framework.renderers.JSONRenderer',
