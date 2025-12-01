@@ -466,11 +466,23 @@ fi
 
 # 13. Run Django collectstatic
 echo "=== Running Django collectstatic ==="
-sudo -u {{backendModule.name}} /opt/{{backendModule.name}}/venv/bin/python manage.py collectstatic --noinput || echo "collectstatic skipped or failed"
+# Load environment variables from django.env for the command
+sudo -u {{backendModule.name}} env $(grep -v '^#' /opt/{{backendModule.name}}/env/django.env | xargs) \
+    /opt/{{backendModule.name}}/venv/bin/python manage.py collectstatic --noinput || echo "collectstatic skipped or failed"
 
 # 14. Run Django migrations
 echo "=== Running Django migrations ==="
-sudo -u {{backendModule.name}} /opt/{{backendModule.name}}/venv/bin/python manage.py migrate --noinput || echo "migrations skipped or failed"
+# Load environment variables from django.env for the command
+sudo -u {{backendModule.name}} env $(grep -v '^#' /opt/{{backendModule.name}}/env/django.env | xargs) \
+    /opt/{{backendModule.name}}/venv/bin/python manage.py migrate --noinput
+if [ $? -ne 0 ]; then
+    echo "ERROR: Migrations failed!"
+    echo "Showing migration status:"
+    sudo -u {{backendModule.name}} env $(grep -v '^#' /opt/{{backendModule.name}}/env/django.env | xargs) \
+        /opt/{{backendModule.name}}/venv/bin/python manage.py showmigrations
+    exit 1
+fi
+echo "Migrations completed successfully"
 
 # 15. Restart service
 echo "=== Restarting {{backendModule.name}}-api service ==="
