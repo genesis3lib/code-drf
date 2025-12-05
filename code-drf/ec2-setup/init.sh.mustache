@@ -287,16 +287,31 @@ if ! grep -q "^PYTHON_DRF_DATABASE_URL=" "$TEMP_DJANGO_ENV"; then
     echo "DATABASE_URL not found, checking for individual DB_* fields..."
 
     # Extract individual DB fields from secrets (already have PYTHON_DRF_ prefix)
-    DB_ENGINE=$(grep "^PYTHON_DRF_DB_ENGINE=" "$TEMP_DJANGO_ENV" | cut -d'=' -f2)
-    DB_HOST=$(grep "^PYTHON_DRF_DB_HOST=" "$TEMP_DJANGO_ENV" | cut -d'=' -f2)
-    DB_PORT=$(grep "^PYTHON_DRF_DB_PORT=" "$TEMP_DJANGO_ENV" | cut -d'=' -f2)
-    DB_NAME=$(grep "^PYTHON_DRF_DB_NAME=" "$TEMP_DJANGO_ENV" | cut -d'=' -f2)
-    DB_USERNAME=$(grep "^PYTHON_DRF_DB_USERNAME=" "$TEMP_DJANGO_ENV" | cut -d'=' -f2)
-    DB_PASSWORD=$(grep "^PYTHON_DRF_DB_PASSWORD=" "$TEMP_DJANGO_ENV" | cut -d'=' -f2)
+    # Use -f2- to handle values containing '=' characters (especially passwords)
+    DB_ENGINE=$(grep "^PYTHON_DRF_DB_ENGINE=" "$TEMP_DJANGO_ENV" | cut -d'=' -f2-)
+    DB_HOST=$(grep "^PYTHON_DRF_DB_HOST=" "$TEMP_DJANGO_ENV" | cut -d'=' -f2-)
+    DB_PORT=$(grep "^PYTHON_DRF_DB_PORT=" "$TEMP_DJANGO_ENV" | cut -d'=' -f2-)
+    DB_NAME=$(grep "^PYTHON_DRF_DB_NAME=" "$TEMP_DJANGO_ENV" | cut -d'=' -f2-)
+    DB_USERNAME=$(grep "^PYTHON_DRF_DB_USERNAME=" "$TEMP_DJANGO_ENV" | cut -d'=' -f2-)
+    DB_PASSWORD=$(grep "^PYTHON_DRF_DB_PASSWORD=" "$TEMP_DJANGO_ENV" | cut -d'=' -f2-)
 
     if [ -n "$DB_HOST" ] && [ -n "$DB_NAME" ] && [ -n "$DB_USERNAME" ]; then
-        # URL-encode the password (handle special characters)
-        ENCODED_PASSWORD=$(python3 -c "import urllib.parse; print(urllib.parse.quote('$DB_PASSWORD', safe=''))")
+        # URL-encode the password (handle special characters like =, $, @, etc.)
+        # Read password directly from file using Python to avoid shell interpretation issues
+        ENCODED_PASSWORD=$(python3 - "$TEMP_DJANGO_ENV" <<'PYEOF'
+import urllib.parse
+import sys
+env_file = sys.argv[1]
+password = ''
+with open(env_file, 'r') as f:
+    for line in f:
+        if line.startswith('PYTHON_DRF_DB_PASSWORD='):
+            # Split only on first '=' to handle passwords containing '='
+            password = line.strip().split('=', 1)[1] if '=' in line else ''
+            break
+print(urllib.parse.quote(password, safe=''))
+PYEOF
+)
 
         # Default engine to postgres if not specified
         DB_ENGINE=${DB_ENGINE:-postgres}
@@ -435,25 +450,44 @@ echo "=== Creating database schema if needed ==="
 cd /opt/{{backendModule.name}}/app
 
 # Get schema name from env or default to backend module name (matching Spring Boot pattern)
-DB_SCHEMA=$(grep "^PYTHON_DRF_DATABASE_SCHEMA=" /opt/{{backendModule.name}}/env/django.env 2>/dev/null | cut -d'=' -f2)
+# Use -f2- to handle values containing '=' characters
+DB_SCHEMA=$(grep "^PYTHON_DRF_DATABASE_SCHEMA=" /opt/{{backendModule.name}}/env/django.env 2>/dev/null | cut -d'=' -f2-)
 if [ -z "$DB_SCHEMA" ]; then
     DB_SCHEMA="{{backendModule.name}}"
 fi
 echo "Database schema: $DB_SCHEMA"
 
 # Extract database connection info from django.env
-DB_HOST=$(grep "^PYTHON_DRF_DB_HOST=" /opt/{{backendModule.name}}/env/django.env 2>/dev/null | cut -d'=' -f2)
-DB_PORT=$(grep "^PYTHON_DRF_DB_PORT=" /opt/{{backendModule.name}}/env/django.env 2>/dev/null | cut -d'=' -f2)
-DB_NAME=$(grep "^PYTHON_DRF_DB_NAME=" /opt/{{backendModule.name}}/env/django.env 2>/dev/null | cut -d'=' -f2)
-DB_USERNAME=$(grep "^PYTHON_DRF_DB_USERNAME=" /opt/{{backendModule.name}}/env/django.env 2>/dev/null | cut -d'=' -f2)
-DB_PASSWORD=$(grep "^PYTHON_DRF_DB_PASSWORD=" /opt/{{backendModule.name}}/env/django.env 2>/dev/null | cut -d'=' -f2)
-
+# Use -f2- to handle values containing '=' characters (especially passwords)
+DB_HOST=$(grep "^PYTHON_DRF_DB_HOST=" /opt/{{backendModule.name}}/env/django.env 2>/dev/null | cut -d'=' -f2-)
+DB_PORT=$(grep "^PYTHON_DRF_DB_PORT=" /opt/{{backendModule.name}}/env/django.env 2>/dev/null | cut -d'=' -f2-)
+DB_NAME=$(grep "^PYTHON_DRF_DB_NAME=" /opt/{{backendModule.name}}/env/django.env 2>/dev/null | cut -d'=' -f2-)
+DB_USERNAME=$(grep "^PYTHON_DRF_DB_USERNAME=" /opt/{{backendModule.name}}/env/django.env 2>/dev/null | cut -d'=' -f2-)
 # Default port
 DB_PORT=${DB_PORT:-5432}
 
 if [ -n "$DB_HOST" ] && [ -n "$DB_NAME" ] && [ -n "$DB_USERNAME" ]; then
     echo "Creating schema '$DB_SCHEMA' if it doesn't exist..."
-    PGPASSWORD="$DB_PASSWORD" psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USERNAME" -d "$DB_NAME" -c "CREATE SCHEMA IF NOT EXISTS $DB_SCHEMA;" 2>&1 || echo "Schema creation skipped or already exists"
+    # Use Python to create .pgpass file to avoid shell interpretation issues with special characters
+    PGPASS_FILE="/tmp/.pgpass.$$"
+    python3 - "/opt/{{backendModule.name}}/env/django.env" "$PGPASS_FILE" <<'PYEOF'
+import sys
+import os
+env_file = sys.argv[1]
+pgpass_file = sys.argv[2]
+password = ''
+with open(env_file, 'r') as f:
+    for line in f:
+        if line.startswith('PYTHON_DRF_DB_PASSWORD='):
+            password = line.strip().split('=', 1)[1] if '=' in line else ''
+            break
+# Write .pgpass format: hostname:port:database:username:password
+with open(pgpass_file, 'w') as f:
+    f.write(f'*:*:*:*:{password}\n')
+os.chmod(pgpass_file, 0o600)
+PYEOF
+    PGPASSFILE="$PGPASS_FILE" psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USERNAME" -d "$DB_NAME" -c "CREATE SCHEMA IF NOT EXISTS $DB_SCHEMA;" 2>&1 || echo "Schema creation skipped or already exists"
+    rm -f "$PGPASS_FILE"
     echo "✅ Schema '$DB_SCHEMA' ready"
 
     # Also add schema to django.env for the app to use

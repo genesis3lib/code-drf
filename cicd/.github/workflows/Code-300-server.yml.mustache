@@ -291,7 +291,8 @@ jobs:
                 exit 1
               elif [ "${STATUS}" != "Success" ]; then
                 ALL_SUCCESS=false
-                if [ "${STATUS}" = "InProgress" ]; then
+                # Both "Pending" and "InProgress" mean the command hasn't finished yet
+                if [ "${STATUS}" = "InProgress" ] || [ "${STATUS}" = "Pending" ]; then
                   ALL_COMPLETE=false
                 fi
               fi
