@@ -168,7 +168,7 @@ jobs:
 
           # Sync the app directory to S3
           echo "Syncing app to S3..."
-          if aws s3 sync ./{{backendModule.moduleId}}/ "s3://${OPS_BUCKET}/app/${APP_VERSION}/" \
+          if aws s3 sync ./{{backendModule.moduleId}}/ "s3://${OPS_BUCKET}/modules/{{backendModule.moduleId}}/app/${APP_VERSION}/" \
             --exclude "*.pyc" \
             --exclude "__pycache__/*" \
             --exclude ".pytest_cache/*" \
@@ -180,7 +180,7 @@ jobs:
 
             # Verify what was uploaded
             echo "Verifying uploaded files:"
-            aws s3 ls "s3://${OPS_BUCKET}/app/${APP_VERSION}/" --region {{{githubVarsOpen}}} env.AWS_REGION  {{{githubVarsClose}}} | head -20
+            aws s3 ls "s3://${OPS_BUCKET}/modules/{{backendModule.moduleId}}/app/${APP_VERSION}/" --region {{{githubVarsOpen}}} env.AWS_REGION  {{{githubVarsClose}}} | head -20
           else
             echo "Failed to sync app to S3 ops bucket: ${OPS_BUCKET}"
             exit 1
@@ -190,7 +190,7 @@ jobs:
         run: |
           echo "Syncing latest EC2 setup scripts from Git to S3..."
           echo "Source: ./{{backendModule.moduleId}}/ec2-setup/"
-          echo "Target: s3://${OPS_BUCKET}/ec2-setup/"
+          echo "Target: s3://${OPS_BUCKET}/modules/{{backendModule.moduleId}}/ec2-setup/"
 
           # Verify source directory exists
           if [ ! -d "./{{backendModule.moduleId}}/ec2-setup" ]; then
@@ -212,12 +212,12 @@ jobs:
           ls -la ./{{backendModule.moduleId}}/ec2-setup/
 
           # Sync EC2 setup scripts to S3 with delete flag to remove old files
-          if aws s3 sync ./{{backendModule.moduleId}}/ec2-setup/ "s3://${OPS_BUCKET}/ec2-setup/" --delete --region {{{githubVarsOpen}}} env.AWS_REGION  {{{githubVarsClose}}}; then
+          if aws s3 sync ./{{backendModule.moduleId}}/ec2-setup/ "s3://${OPS_BUCKET}/modules/{{backendModule.moduleId}}/ec2-setup/" --delete --region {{{githubVarsOpen}}} env.AWS_REGION  {{{githubVarsClose}}}; then
             echo "Successfully synced EC2 setup scripts to S3"
 
             # Verify what was uploaded
             echo "Verifying uploaded files:"
-            aws s3 ls "s3://${OPS_BUCKET}/ec2-setup/" --region {{{githubVarsOpen}}} env.AWS_REGION  {{{githubVarsClose}}}
+            aws s3 ls "s3://${OPS_BUCKET}/modules/{{backendModule.moduleId}}/ec2-setup/" --region {{{githubVarsOpen}}} env.AWS_REGION  {{{githubVarsClose}}}
           else
             echo "Failed to sync EC2 setup scripts to S3"
             exit 1
@@ -239,7 +239,7 @@ jobs:
             --parameters 'commands=[
               "echo \"=== Syncing EC2 setup scripts from S3 ===\"",
               "sudo mkdir -p /opt/{{backendModule.name}}/ec2-setup",
-              "aws s3 sync s3://'${OPS_BUCKET}'/ec2-setup/ /opt/{{backendModule.name}}/ec2-setup/ --region '${AWS_REGION}'",
+              "aws s3 sync s3://'${OPS_BUCKET}'/modules/{{backendModule.moduleId}}/ec2-setup/ /opt/{{backendModule.name}}/ec2-setup/ --region '${AWS_REGION}'",
               "sudo chmod +x /opt/{{backendModule.name}}/ec2-setup/*.sh",
               "echo \"=== Running initialization script ===\"",
               "sudo /opt/{{backendModule.name}}/ec2-setup/init.sh '${APP_VERSION}' '${DJANGO_SETTINGS_MODULE}'"

@@ -130,14 +130,14 @@ else
     ENV_FOR_S3="production"
 fi
 
-echo "Source: s3://{{projectName}}-${ENV_FOR_S3}-ops-${AWS_ACCOUNT_ID}/ec2-setup/"
+echo "Source: s3://{{projectName}}-${ENV_FOR_S3}-ops-${AWS_ACCOUNT_ID}/modules/{{backendModule.moduleId}}/ec2-setup/"
 echo "Target: /opt/{{backendModule.name}}/ec2-setup/"
 
 # Create target directory if it doesn't exist
 sudo mkdir -p /opt/{{backendModule.name}}/ec2-setup
 
 # Sync all files from S3 ec2-setup directory
-if sudo aws s3 sync s3://{{projectName}}-${ENV_FOR_S3}-ops-${AWS_ACCOUNT_ID}/ec2-setup/ /opt/{{backendModule.name}}/ec2-setup/; then
+if sudo aws s3 sync s3://{{projectName}}-${ENV_FOR_S3}-ops-${AWS_ACCOUNT_ID}/modules/{{backendModule.moduleId}}/ec2-setup/ /opt/{{backendModule.name}}/ec2-setup/; then
     echo "Successfully synced EC2 setup scripts from S3"
 
     # Make all shell scripts executable
@@ -354,7 +354,7 @@ fi
 
 # 10. Download new app from S3
 echo "=== Downloading new application from S3 ==="
-if sudo aws s3 sync "s3://{{projectName}}-${ENV_FOR_S3}-ops-${AWS_ACCOUNT_ID}/app/${APP_VERSION}/" /opt/{{backendModule.name}}/app/; then
+if sudo aws s3 sync "s3://{{projectName}}-${ENV_FOR_S3}-ops-${AWS_ACCOUNT_ID}/modules/{{backendModule.moduleId}}/app/${APP_VERSION}/" /opt/{{backendModule.name}}/app/; then
     echo "Successfully downloaded app version $APP_VERSION from S3"
     sudo chown -R {{backendModule.name}}:{{backendModule.name}} /opt/{{backendModule.name}}/app
 else
