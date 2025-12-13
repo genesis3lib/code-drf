@@ -89,7 +89,20 @@ except ImportError:
     }
 
 # CORS settings
-CORS_ALLOWED_ORIGINS = []
+# Base domain for CORS (e.g., gala67.com)
+_base_domain = '{{{domain}}}'
+
+CORS_ALLOWED_ORIGINS = [
+    # Base domain (allows requests from https://{domain})
+    f'https://{_base_domain}',
+]
+
+# Regex pattern to allow all subdomains of the base domain (*.{domain})
+import re
+_escaped_domain = re.escape(_base_domain)
+CORS_ALLOWED_ORIGIN_REGEXES = [
+    rf'^https://.*\.{_escaped_domain}$',
+]
 
 {{^isProduction}}
 # Development: Allow common local frontend ports
