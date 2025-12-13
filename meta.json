@@ -130,6 +130,10 @@
   },
   "gitIgnore": {
     "drf": [
+      "# Local development",
+      ".pids/",
+      ".logs/",
+      "",
       "# Python",
       "__pycache__/",
       "*.py[cod]",
