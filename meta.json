@@ -9,6 +9,7 @@
       "cicd"
     ],
     "type": "drf",
+    "providers": ["aws"],
     "description": "Bare minimum Django REST Framework API skeleton",
     "version": "1.0.0",
     "author": "Genesis Team",
@@ -18,9 +19,6 @@
       "python",
       "backend",
       "rest-api"
-    ],
-    "providers": [
-      "aws"
     ],
     "providesFragments": {
       "backend-api": {
