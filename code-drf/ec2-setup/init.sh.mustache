@@ -181,19 +181,19 @@ else
     echo "No Django settings specified, defaulting to production"
 fi
 
-# Read extension-required Django settings from genesis3.json
+# Read extension-required Django settings from grablin.json
 EXTENSION_SETTINGS=""
-if [ -f "/opt/{{backendModule.name}}/ec2-setup/genesis3.json" ]; then
-    echo "Reading extension settings from genesis3.json..."
+if [ -f "/opt/{{backendModule.name}}/ec2-setup/grablin.json" ]; then
+    echo "Reading extension settings from grablin.json..."
     # For Django, we might use different profiles/settings
-    EXTENSION_SETTINGS=$(jq -r '.djangoSettings // [] | join(",")' /opt/{{backendModule.name}}/ec2-setup/genesis3.json)
+    EXTENSION_SETTINGS=$(jq -r '.djangoSettings // [] | join(",")' /opt/{{backendModule.name}}/ec2-setup/grablin.json)
     if [ -n "$EXTENSION_SETTINGS" ]; then
         echo "Found extension settings: $EXTENSION_SETTINGS"
     else
-        echo "No extension settings found in genesis3.json"
+        echo "No extension settings found in grablin.json"
     fi
 else
-    echo "genesis3.json not found at /opt/{{backendModule.name}}/ec2-setup/genesis3.json"
+    echo "grablin.json not found at /opt/{{backendModule.name}}/ec2-setup/grablin.json"
     echo "Continuing without extension settings"
 fi
 
@@ -331,6 +331,49 @@ fi
 
 # Final summary
 echo "Secrets configuration completed"
+
+# 8b. Inject runtimeConfigValues from grablin.json for current environment
+echo "=== Injecting runtimeConfigValues from grablin.json ==="
+if [ -f "/opt/{{backendModule.name}}/ec2-setup/grablin.json" ]; then
+    # Check if runtimeConfigValues exists in grablin.json
+    RUNTIME_CONFIG_EXISTS=$(jq -e '.runtimeConfigValues | length > 0' /opt/{{backendModule.name}}/ec2-setup/grablin.json 2>/dev/null)
+
+    if [ "$RUNTIME_CONFIG_EXISTS" = "true" ]; then
+        echo "Found runtimeConfigValues in grablin.json"
+        echo "Extracting values for environment: $ENV_FOR_SECRET"
+
+        # Extract all runtimeConfigValues for the current environment across all modules
+        # Structure: { "moduleId": { "envName": { "key": "value" } } }
+        # We need all values from: .runtimeConfigValues[*][$ENV_FOR_SECRET][*]
+
+        RUNTIME_VALUES=$(jq -r --arg env "$ENV_FOR_SECRET" '
+            .runtimeConfigValues // {}
+            | to_entries[]
+            | .value[$env] // {}
+            | to_entries[]
+            | "PYTHON_DRF_\(.key)=\(.value)"
+        ' /opt/{{backendModule.name}}/ec2-setup/grablin.json 2>/dev/null)
+
+        if [ -n "$RUNTIME_VALUES" ]; then
+            echo "Adding runtimeConfigValues to Django environment:"
+            echo "$RUNTIME_VALUES" >> "$TEMP_DJANGO_ENV"
+
+            # Show what we added (mask values for security)
+            echo "$RUNTIME_VALUES" | while read -r line; do
+                KEY=$(echo "$line" | cut -d'=' -f1)
+                echo "Set $KEY=***MASKED***"
+            done
+
+            echo "Successfully added runtimeConfigValues for environment: $ENV_FOR_SECRET"
+        else
+            echo "No runtimeConfigValues found for environment: $ENV_FOR_SECRET"
+        fi
+    else
+        echo "No runtimeConfigValues in grablin.json"
+    fi
+else
+    echo "grablin.json not found, skipping runtimeConfigValues injection"
+fi
 
 # Move temp file to final location
 sudo mv "$TEMP_DJANGO_ENV" /opt/{{backendModule.name}}/env/django.env
