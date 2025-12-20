@@ -596,11 +596,53 @@ while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
 done
 
 # If we get here, the service failed to start
-echo "Service failed to start after $((MAX_RETRIES * SLEEP_TIME)) seconds."
+echo "❌ Service failed to start after $((MAX_RETRIES * SLEEP_TIME)) seconds."
 echo
 echo "=== Service Status ==="
 sudo systemctl status {{backendModule.name}}-api.service --no-pager -l
 echo
 echo "=== Recent Error Logs ==="
 sudo journalctl -u {{backendModule.name}}-api.service -n 20 --no-pager
-exit 1
+
+# Try to restore backup app to keep service alive (prevents ASG from terminating instance)
+echo
+echo "=== Attempting to restore previous stable app ==="
+LATEST_BACKUP=$(ls -td /opt/{{backendModule.name}}/backups/app.backup.* 2>/dev/null | head -1)
+if [ -n "$LATEST_BACKUP" ] && [ -d "$LATEST_BACKUP" ]; then
+    echo "📋 Found backup: $LATEST_BACKUP"
+    echo "🔄 Restoring backup app to keep service alive..."
+
+    # Move failed app aside for debugging
+    FAILED_APP="/opt/{{backendModule.name}}/backups/app.failed.$(date +%Y%m%d_%H%M%S)"
+    sudo mv /opt/{{backendModule.name}}/app "$FAILED_APP"
+    echo "📋 Failed app saved as: $FAILED_APP"
+
+    # Restore backup
+    sudo cp -r "$LATEST_BACKUP" /opt/{{backendModule.name}}/app
+    sudo chown -R {{backendModule.name}}:{{backendModule.name}} /opt/{{backendModule.name}}/app
+
+    # Restart with restored app
+    echo "🔄 Restarting service with restored app..."
+    sudo systemctl restart {{backendModule.name}}-api.service
+    sleep 10
+
+    if systemctl is-active --quiet {{backendModule.name}}-api.service; then
+        echo "✅ Service restored successfully with previous app!"
+        echo "⚠️ WARNING: Deployment failed but service is running with PREVIOUS version"
+        echo "⚠️ Please fix the new app and redeploy"
+        echo
+        echo "=== Service Status (restored) ==="
+        sudo systemctl status {{backendModule.name}}-api.service --no-pager -l
+        # Exit with error to signal deployment failed, but service is alive
+        exit 1
+    else
+        echo "❌ Restored app also failed to start!"
+        echo "❌ Service is DOWN - manual intervention required"
+        exit 1
+    fi
+else
+    echo "⚠️ No backup app found to restore"
+    echo "❌ Service is DOWN - this may be a virgin deployment failure"
+    echo "❌ Manual intervention required"
+    exit 1
+fi
